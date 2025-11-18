@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import os
 from keras.models import load_model
 from statistics import mode
 from utils.datasets import get_labels
@@ -22,7 +23,7 @@ emotion_offsets = (20, 40)
 
 # loading models
 face_cascade = cv2.CascadeClassifier('./models/haarcascade_frontalface_default.xml')
-emotion_classifier = load_model(emotion_model_path)
+emotion_classifier = load_model(emotion_model_path, compile=False)
 
 # getting input model shapes for inference
 emotion_target_size = emotion_classifier.input_shape[1:3]
@@ -33,14 +34,48 @@ emotion_window = []
 # starting video streaming
 
 cv2.namedWindow('window_frame')
-video_capture = cv2.VideoCapture(0)
+
+
+def _open_webcam(max_index=4):
+    """Try opening webcam indices 0..max_index-1 and return first working capture."""
+    for i in range(max_index):
+        cap = cv2.VideoCapture(i)
+        if cap is None or not cap.isOpened():
+            # couldn't open this index
+            try:
+                cap.release()
+            except Exception:
+                pass
+            continue
+        # attempt to read a frame to ensure initialization
+        ret, _ = cap.read()
+        if ret:
+            return cap, i
+        try:
+            cap.release()
+        except Exception:
+            pass
+    return None, None
+
 
 # Select video or webcam feed
 cap = None
-if (USE_WEBCAM == True):
-    cap = cv2.VideoCapture(0) # Webcam source
+if USE_WEBCAM:
+    cap, cam_index = _open_webcam(max_index=4)
+    if cap is None:
+        print('\nERROR: Unable to access webcam.')
+        print('On macOS, grant camera permission to your Terminal app:')
+        print('  System Settings -> Privacy & Security -> Camera -> enable Terminal')
+        print('After granting permission, restart Terminal and re-run the script.')
+        exit(1)
+    else:
+        print(f'Using webcam index: {cam_index}')
 else:
-    cap = cv2.VideoCapture('./demo/dinner.mp4') # Video file source
+    demo_path = './demo/dinner.mp4'
+    if not os.path.exists(demo_path):
+        print(f"ERROR: demo video not found at {demo_path}")
+        exit(1)
+    cap = cv2.VideoCapture(demo_path) # Video file source
 
 while cap.isOpened(): # True:
     ret, bgr_image = cap.read()
